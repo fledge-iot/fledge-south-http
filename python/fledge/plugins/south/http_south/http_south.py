@@ -67,7 +67,8 @@ _DEFAULT_CONFIG = {
         'type': 'string',
         'default': 'http-',
         'order': '4',
-        'displayName': 'Asset Name Prefix'
+        'displayName': 'Asset Name Prefix',
+        'mandatory': 'true'
     },
     'enableHttp': {
         'description': 'Enable HTTP (Set false to use HTTPS)',
