@@ -74,20 +74,28 @@ _DEFAULT_CONFIG = {
         'type': 'boolean',
         'default': 'true',
         'order': '5',
-        'displayName': 'Enable Http'
+        'displayName': 'Enable HTTP'
+    },
+    'readingsTimestampTimezone': {
+        'description': 'Readings Timestamp timezone to receive data in i.e. UTC or Local (defaults to UTC)',
+        'type': 'enumeration',
+        'default': 'UTC',
+        'options': ['Local', 'UTC'],
+        'order': '6',
+        'displayName': 'Readings Timestamp Timezone'
     },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
         'default': '6684',
-        'order': '6',
-        'displayName': 'Https Port'
+        'order': '7',
+        'displayName': 'HTTPS Port'
     },
     'certificateName': {
         'description': 'Certificate file name',
         'type': 'string',
         'default': 'fledge',
-        'order': '7',
+        'order': '8',
         'displayName': 'Certificate Name'
     }
 }
@@ -114,6 +122,9 @@ def plugin_init(config):
     Raises:
     """
     handle = copy.deepcopy(config)
+    if handle['readingsTimestampTimezone']['value'] not in ['Local', 'UTC']:
+        _LOGGER.exception("readingsTimestampTimezone should be either 'Local' or 'UTC'")
+        raise RuntimeError
     return handle
 
 
@@ -298,11 +309,24 @@ class HttpSouthIngest(object):
 
             for payload in payload_block:
                 asset = "{}{}".format(self.config_data['assetNamePrefix']['value'], payload['asset'])
-                timestamp = payload['timestamp']
+                dt_str = payload['timestamp']
 
-                # HOTFIX: To ingest readings sent from fledge sending process
-                if not timestamp.rfind("+") == -1:
-                    timestamp = timestamp + ":00"
+                if self.config_data['readingsTimestampTimezone']['value'] == 'UTC':
+                    from datetime import datetime
+                    from tzlocal import get_localzone
+                    # Don't match with C/common/reading.cpp#L268 i.e. for getAssetDateUserTime sent by North
+                    # fmt = "%Y-%m-%d %H:%M:%S.%f+00:00"
+                    # but the sending process
+                    fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
+                    ts = datetime.strptime(dt_str, fmt).timestamp()
+                    # Convert to local time zone
+                    dt = datetime.utcfromtimestamp(ts).astimezone(get_localzone())
+                    dt_str = str(dt)
+
+                # TODO: review and remove this old hotfix
+                # HOTFIX: To ingest readings sent from sending process
+                if not dt_str.rfind("+") == -1:
+                    dt_str += ":00"
 
                 # readings or sensor_values are optional
                 try:
@@ -317,7 +341,7 @@ class HttpSouthIngest(object):
 
                 data = {
                     'asset': asset,
-                    'timestamp': timestamp,
+                    'timestamp': dt_str,
                     'readings': readings
                 }
                 async_ingest.ingest_callback(c_callback, c_ingest_ref, data)
