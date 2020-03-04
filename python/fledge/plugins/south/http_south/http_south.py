@@ -207,9 +207,15 @@ def plugin_reconfigure(handle, new_config):
     return new_handle
 
 
-def _plugin_stop(handle):
-    _LOGGER.info('Stopping South HTTP plugin.')
-    global loop
+def plugin_shutdown(handle):
+    """ Shutdowns the plugin doing required cleanup, to be called prior to the South service being shut down.
+
+    Args:
+        handle: handle returned by the plugin initialisation call
+    Returns:
+    Raises:
+    """
+    global loop, t
     try:
         app = handle['app']
         handler = handle['handler']
@@ -220,21 +226,16 @@ def _plugin_stop(handle):
             asyncio.ensure_future(app.shutdown(), loop=loop)
             asyncio.ensure_future(handler.shutdown(60.0), loop=loop)
             asyncio.ensure_future(app.cleanup(), loop=loop)
-        loop.stop()
+            pending = asyncio.Task.all_tasks()
+            if len(pending):
+                loop.run_until_complete(asyncio.gather(*pending))
+    except (RuntimeError, asyncio.CancelledError):
+        pass
     except Exception as e:
         _LOGGER.exception(str(e))
-        raise
-
-
-def plugin_shutdown(handle):
-    """ Shutdowns the plugin doing required cleanup, to be called prior to the South service being shut down.
-
-    Args:
-        handle: handle returned by the plugin initialisation call
-    Returns:
-    Raises:
-    """
-    _plugin_stop(handle)
+    finally:
+        loop = None
+        t = None
     _LOGGER.info('South HTTP plugin shut down.')
 
 
