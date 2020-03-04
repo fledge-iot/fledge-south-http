@@ -216,7 +216,8 @@ def plugin_shutdown(handle):
             asyncio.ensure_future(handler.shutdown(60.0), loop=loop)
             asyncio.ensure_future(app.cleanup(), loop=loop)
             pending = asyncio.Task.all_tasks()
-            loop.run_until_complete(asyncio.gather(*pending))
+            if len(pending):
+                loop.run_until_complete(asyncio.gather(*pending))
     except (RuntimeError, asyncio.CancelledError):
         pass
     except Exception as e:
