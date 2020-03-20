@@ -76,26 +76,18 @@ _DEFAULT_CONFIG = {
         'order': '5',
         'displayName': 'Enable HTTP'
     },
-    'readingsTimestampTimezone': {
-        'description': 'Readings Timestamp timezone to receive data in i.e. UTC or Local (defaults to UTC)',
-        'type': 'enumeration',
-        'default': 'UTC',
-        'options': ['Local', 'UTC'],
-        'order': '6',
-        'displayName': 'Readings Timestamp Timezone'
-    },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
         'default': '6684',
-        'order': '7',
+        'order': '6',
         'displayName': 'HTTPS Port'
     },
     'certificateName': {
         'description': 'Certificate file name',
         'type': 'string',
         'default': 'fledge',
-        'order': '8',
+        'order': '7',
         'displayName': 'Certificate Name'
     }
 }
@@ -122,9 +114,6 @@ def plugin_init(config):
     Raises:
     """
     handle = copy.deepcopy(config)
-    if handle['readingsTimestampTimezone']['value'] not in ['Local', 'UTC']:
-        _LOGGER.exception("readingsTimestampTimezone should be either 'Local' or 'UTC'")
-        raise RuntimeError
     return handle
 
 
@@ -312,22 +301,14 @@ class HttpSouthIngest(object):
                 asset = "{}{}".format(self.config_data['assetNamePrefix']['value'], payload['asset'])
                 dt_str = payload['timestamp']
 
-                if self.config_data['readingsTimestampTimezone']['value'] == 'UTC':
+                if dt_str.endswith("Z"):
                     from datetime import datetime
                     from tzlocal import get_localzone
-                    # Don't match with C/common/reading.cpp#L268 i.e. for getAssetDateUserTime sent by North
-                    # fmt = "%Y-%m-%d %H:%M:%S.%f+00:00"
-                    # but the sending process
                     fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
                     ts = datetime.strptime(dt_str, fmt).timestamp()
                     # Convert to local time zone
                     dt = datetime.utcfromtimestamp(ts).astimezone(get_localzone())
                     dt_str = str(dt)
-
-                # TODO: review and remove this old hotfix
-                # HOTFIX: To ingest readings sent from sending process
-                if not dt_str.rfind("+") == -1:
-                    dt_str += ":00"
 
                 # readings or sensor_values are optional
                 try:
