@@ -302,13 +302,11 @@ class HttpSouthIngest(object):
                 dt_str = payload['timestamp']
 
                 if dt_str.endswith("Z"):
-                    from datetime import datetime
-                    from tzlocal import get_localzone
+                    from datetime import datetime, timezone
                     fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
-                    ts = datetime.strptime(dt_str, fmt).timestamp()
+                    utc_dt = datetime.strptime(dt_str, fmt)
                     # Convert to local time zone
-                    dt = datetime.utcfromtimestamp(ts).astimezone(get_localzone())
-                    dt_str = str(dt)
+                    dt_str = str(utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None))
 
                 # readings or sensor_values are optional
                 try:
