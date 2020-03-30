@@ -306,7 +306,7 @@ class HttpSouthIngest(object):
                     fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
                     utc_dt = datetime.strptime(dt_str, fmt)
                     # Convert to local time zone
-                    dt_str = str(utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=none))
+                    dt_str = str(utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None))
 
                 # readings or sensor_values are optional
                 try:
