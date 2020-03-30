@@ -7,6 +7,7 @@
 """HTTP Listener handler for sensor readings"""
 import asyncio
 import copy
+from datetime import datetime, timezone
 import os
 import ssl
 import logging
@@ -302,7 +303,6 @@ class HttpSouthIngest(object):
                 dt_str = payload['timestamp']
 
                 if dt_str.endswith("Z"):
-                    from datetime import datetime, timezone
                     fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
                     utc_dt = datetime.strptime(dt_str, fmt)
                     # Convert to local time zone
