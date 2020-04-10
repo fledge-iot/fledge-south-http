@@ -7,6 +7,7 @@
 """HTTP Listener handler for sensor readings"""
 import asyncio
 import copy
+from datetime import datetime, timezone
 import os
 import ssl
 import logging
@@ -74,14 +75,14 @@ _DEFAULT_CONFIG = {
         'type': 'boolean',
         'default': 'true',
         'order': '5',
-        'displayName': 'Enable Http'
+        'displayName': 'Enable HTTP'
     },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
         'default': '6684',
         'order': '6',
-        'displayName': 'Https Port'
+        'displayName': 'HTTPS Port'
     },
     'certificateName': {
         'description': 'Certificate file name',
@@ -299,11 +300,13 @@ class HttpSouthIngest(object):
 
             for payload in payload_block:
                 asset = "{}{}".format(self.config_data['assetNamePrefix']['value'], payload['asset'])
-                timestamp = payload['timestamp']
+                dt_str = payload['timestamp']
 
-                # HOTFIX: To ingest readings sent from fledge sending process
-                if not timestamp.rfind("+") == -1:
-                    timestamp = timestamp + ":00"
+                if dt_str.endswith("Z"):
+                    fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
+                    utc_dt = datetime.strptime(dt_str, fmt)
+                    # Convert to local time zone
+                    dt_str = str(utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None))
 
                 # readings or sensor_values are optional
                 try:
@@ -318,7 +321,7 @@ class HttpSouthIngest(object):
 
                 data = {
                     'asset': asset,
-                    'timestamp': timestamp,
+                    'timestamp': dt_str,
                     'readings': readings
                 }
                 async_ingest.ingest_callback(c_callback, c_ingest_ref, data)
