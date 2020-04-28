@@ -33,9 +33,9 @@ To create a south service you, as with any other south plugin
 
   - Configure the plugin
 
-    +----------=
+    +----------+
     | |http_1| |
-    +----------=
+    +----------+
 
     - **Host**: The host name or IP address to bind to. This may be left as default, in which case the plugin binds to any address. If you have a machine with multiple network interfaces you may use this parameter to select one of those interfaces to use.
 
