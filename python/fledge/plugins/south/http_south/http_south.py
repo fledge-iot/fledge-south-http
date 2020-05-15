@@ -7,6 +7,7 @@
 """HTTP Listener handler for sensor readings"""
 import asyncio
 import copy
+from datetime import datetime, timezone
 import os
 import ssl
 import logging
@@ -74,14 +75,14 @@ _DEFAULT_CONFIG = {
         'type': 'boolean',
         'default': 'true',
         'order': '5',
-        'displayName': 'Enable Http'
+        'displayName': 'Enable HTTP'
     },
     'httpsPort': {
         'description': 'Port to accept HTTPS connections on',
         'type': 'integer',
         'default': '6684',
         'order': '6',
-        'displayName': 'Https Port'
+        'displayName': 'HTTPS Port'
     },
     'certificateName': {
         'description': 'Certificate file name',
@@ -96,7 +97,7 @@ _DEFAULT_CONFIG = {
 def plugin_info():
     return {
         'name': 'HTTP South Listener',
-        'version': '1.7.0',
+        'version': '1.8.0',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
@@ -196,9 +197,15 @@ def plugin_reconfigure(handle, new_config):
     return new_handle
 
 
-def _plugin_stop(handle):
-    _LOGGER.info('Stopping South HTTP plugin.')
-    global loop
+def plugin_shutdown(handle):
+    """ Shutdowns the plugin doing required cleanup, to be called prior to the South service being shut down.
+
+    Args:
+        handle: handle returned by the plugin initialisation call
+    Returns:
+    Raises:
+    """
+    global loop, t
     try:
         app = handle['app']
         handler = handle['handler']
@@ -209,21 +216,16 @@ def _plugin_stop(handle):
             asyncio.ensure_future(app.shutdown(), loop=loop)
             asyncio.ensure_future(handler.shutdown(60.0), loop=loop)
             asyncio.ensure_future(app.cleanup(), loop=loop)
-        loop.stop()
+            pending = asyncio.Task.all_tasks()
+            if len(pending):
+                loop.run_until_complete(asyncio.gather(*pending))
+    except (RuntimeError, asyncio.CancelledError):
+        pass
     except Exception as e:
         _LOGGER.exception(str(e))
-        raise
-
-
-def plugin_shutdown(handle):
-    """ Shutdowns the plugin doing required cleanup, to be called prior to the South service being shut down.
-
-    Args:
-        handle: handle returned by the plugin initialisation call
-    Returns:
-    Raises:
-    """
-    _plugin_stop(handle)
+    finally:
+        loop = None
+        t = None
     _LOGGER.info('South HTTP plugin shut down.')
 
 
@@ -278,14 +280,13 @@ class HttpSouthIngest(object):
                     [ {
                         "timestamp": "2017-01-02T01:02:03.23232Z-05:00",
                         "asset": "pump1",
-                        "key": "80a43623-ebe5-40d6-8d80-3f892da9b3b4",
                         "readings": {"humidity": 0.0, "temperature": -40.0}
                       },
                       ...
                     ]
         Example:
             curl -X POST http://localhost:6683/sensor-reading -d '[{"timestamp": "2017-01-02T01:02:03.23232Z-05:00",
-                "asset": "pump1", "key": "80a43623-ebe5-40d6-8d80-3f892da9b3b4", "readings": {"humidity": 0.0, "temperature": -40.0}}]'
+                "asset": "pump1", "readings": {"humidity": 0.0, "temperature": -40.0}}]'
         """
         message = {'result': 'success'}
         try:
@@ -299,12 +300,13 @@ class HttpSouthIngest(object):
 
             for payload in payload_block:
                 asset = "{}{}".format(self.config_data['assetNamePrefix']['value'], payload['asset'])
-                timestamp = payload['timestamp']
-                key = payload['key']
+                dt_str = payload['timestamp']
 
-                # HOTFIX: To ingest readings sent from fledge sending process
-                if not timestamp.rfind("+") == -1:
-                    timestamp = timestamp + ":00"
+                if dt_str.endswith("Z"):
+                    fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
+                    utc_dt = datetime.strptime(dt_str, fmt)
+                    # Convert to local time zone
+                    dt_str = str(utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None))
 
                 # readings or sensor_values are optional
                 try:
@@ -319,8 +321,7 @@ class HttpSouthIngest(object):
 
                 data = {
                     'asset': asset,
-                    'timestamp': timestamp,
-                    'key': key,
+                    'timestamp': dt_str,
                     'readings': readings
                 }
                 async_ingest.ingest_callback(c_callback, c_ingest_ref, data)
