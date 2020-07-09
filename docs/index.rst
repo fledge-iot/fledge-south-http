@@ -78,27 +78,27 @@ The content of the *readings* object is a set of JSON properties, each of which 
 
 A property
 
-```
-    "voltage" : 231
-```
+.. code-block:: console
+
+"voltage" : 231
 
 would represent a numeric data value for the item *voltage* within the asset. Whereas
 
-```
+.. code-block:: console
+
     "voltageUnit" : "volts"
-```
 
 Is string data for that same asset. Other data may be presented as arrays
 
-```
+.. code-block:: console
+
    "acceleration" : [ 0.4, 0.8, 1.0 ]
-```
 
 would represent acceleration with the three components of the vector, x, y, and z. This may also be represented as an object
 
-```
+.. code-block:: console
+
    "acceleration" : { "X" : 0.4, "Y" : 0.8, "Z" : 1.0 }
-```
 
 both are valid formats within Fledge.
 
