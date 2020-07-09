@@ -80,7 +80,7 @@ A property
 
 .. code-block:: console
 
-"voltage" : 231
+   "voltage" : 239.4
 
 would represent a numeric data value for the item *voltage* within the asset. Whereas
 
