@@ -17,7 +17,9 @@
 South HTTP
 ==========
 
-The *fledge-south-http* plugin allows data to be received from another Fledge instance. The Fledge which is sending the data the corresponding north task wit the HTTP north plugin installed. There are two options for the HTTP north |http-c| or |http-python|. The plugin supports both HTTP and HTTPS transport protocols and sends a JSON payload of reading data in the internal Fledge format.
+The *fledge-south-http* plugin allows data to be received from another Fledge instance or external system using a REST interface. The Fledge which is sending the data to the corresponding north task with the HTTP north plugin installed. There are two options for the HTTP north |http-c| or |http-python|, these serve the dual purpose of providing a data path between Fledge instances and also as examples of how other systems might use the REST interface from C/C++ or Python. The plugin supports both HTTP and HTTPS transport protocols and sends a JSON payload of reading data in the internal Fledge format.
+
+The primary purpose of this plugin is for Fledge to Fledge communication however, there is no reason to prevent other applications that wish to send data into a Fledge system to not use this plugin also. The only requirement is that the application that is sending the data uses the same JSON payload structure as Fledge uses for passing reading data between different instances. Data should be sent to the URL defined in the configuration of the plugin using a POST request. The caller may choose to send one or many readings within a single POST request and those readings may be for multiple assets.
 
 To create a south service you, as with any other south plugin
 
@@ -41,7 +43,7 @@ To create a south service you, as with any other south plugin
 
     - **Port**: The port to listen for connection from another Fledge instance.
 
-    - **URL**: The URI that the plugin accepts data on. This should normally be left to the default.
+    - **URL**: URI that the plugin accepts data on. This should normally be left to the default.
 
     - **Asset Name Prefix**: A prefix to add to the incoming asset names. This may be left blank if you wish to preserve the same asset names.
 
@@ -52,3 +54,68 @@ To create a south service you, as with any other south plugin
   - Click *Next*
 
   - Enable your service and click *Done*
+
+JSON Payload
+------------
+
+The payload that is expected by this plugin is a simple JSON presentation of a set of reading values. A JSON array is expected with one or more reading objects contained within it. Each reading object consists of a timestamp, an asset name and a set of data points within that asset. The data points are represented as name value pair  JSON properties within the reading property.
+
+The fixed part of every reading contains the following
+
++-----------+----------------------------------------------------------------+
+| Name      | Description                                                    |
++===========+================================================================+
+| timestamp | The timestamp as an ASCII string in ISO 8601 extended format.  |
+|           | If no time zone information is given it is assumed to indicate |
+|           | the use of UTC.                                                |
++-----------+----------------------------------------------------------------+
+| asset     | The name of the asset this reading represents.                 |
++-----------+----------------------------------------------------------------+
+| readings  | A JSON object that contains the data points for this asset.    |
++-----------+----------------------------------------------------------------+
+
+The content of the *readings* object is a set of JSON properties, each of which represents a data value. The type of these values may be integer, floating point, string, a JSON object or an array of floating point numbers.
+
+A property
+
+.. code-block:: console
+
+   "voltage" : 239.4
+
+would represent a numeric data value for the item *voltage* within the asset. Whereas
+
+.. code-block:: console
+
+    "voltageUnit" : "volts"
+
+Is string data for that same asset. Other data may be presented as arrays
+
+.. code-block:: console
+
+   "acceleration" : [ 0.4, 0.8, 1.0 ]
+
+would represent acceleration with the three components of the vector, x, y, and z. This may also be represented as an object
+
+.. code-block:: console
+
+   "acceleration" : { "X" : 0.4, "Y" : 0.8, "Z" : 1.0 }
+
+both are valid formats within Fledge.
+
+An example payload with a single reading would be as shown below
+
+.. code-block:: console
+
+    [
+       {
+           "timestamp" : "2020-07-08 16:16:07.263657+00:00",
+           "asset"     : "motor1",
+           "readings"  : {
+                         "voltage"  : 239.4,
+                         "current"  : 1003,
+                         "rpm"      : 120147
+                         } 
+       }
+   ]
+
+
