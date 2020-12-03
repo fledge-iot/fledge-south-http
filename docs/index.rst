@@ -4,11 +4,11 @@
 .. Links
 .. |http-c| raw:: html
 
-   <a href="../fledge-north-http-c/index.html">C++ version</a>
+   <a href="../fledge-north-httpc/index.html">C++ version</a>
 
 .. |http-python| raw:: html
 
-   <a href="../fledge-north-http/index.html">Python version</a>
+   <a href="../fledge-north-http_north/index.html">Python version</a>
 
 .. |CertificateStore| raw:: html
 
