@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # FLEDGE_BEGIN
-# See: http://fledge.readthedocs.io/
+# See: http://fledge-iot.readthedocs.io/
 # FLEDGE_END
 
 """Unit test for fledge.plugins.south.http_south.http_south"""
@@ -76,7 +76,7 @@ def mock_request(data, loop):
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
-        'version': '1.9.0',
+        'version': '1.9.1',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
