@@ -16,7 +16,6 @@ from aiohttp import web
 
 from fledge.common import logger
 from fledge.common.web import middleware
-from fledge.plugins.common import utils
 import async_ingest
 
 
@@ -90,7 +89,14 @@ _DEFAULT_CONFIG = {
         'default': 'fledge',
         'order': '7',
         'displayName': 'Certificate Name'
-    }
+    },
+    'enableCors': {
+        'description': 'Enable Cross Origin Resource Sharing',
+        'type': 'boolean',
+        'default': 'false',
+        'order': '8',
+        'displayName': 'Enable CORS'
+    },
 }
 
 
@@ -119,6 +125,24 @@ def plugin_init(config):
 
 
 def plugin_start(data):
+    def enable_cors(_app):
+        """ implements Cross Origin Resource Sharing (CORS) support """
+        import aiohttp_cors
+
+        # Configure default CORS settings.
+        cors = aiohttp_cors.setup(_app, defaults={
+            "*": aiohttp_cors.ResourceOptions(
+                allow_methods=["GET", "POST", "PUT", "DELETE"],
+                allow_credentials=True,
+                expose_headers="*",
+                allow_headers="*",
+            )
+        })
+
+        # Configure CORS on routes.
+        for route in list(_app.router.routes()):
+            cors.add(route)
+
     global loop, t
     _LOGGER.info("plugin_start called")
 
@@ -131,6 +155,9 @@ def plugin_start(data):
         http_south_ingest = HttpSouthIngest(config=data)
         app = web.Application(middlewares=[middleware.error_middleware], loop=loop)
         app.router.add_route('POST', '/{}'.format(uri), http_south_ingest.render_post)
+        if data['enableCors']['value'] == 'true':
+            # enable cors support
+            enable_cors(app)
         handler = app.make_handler(loop=loop)
 
         # SSL context
