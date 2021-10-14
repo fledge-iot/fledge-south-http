@@ -7,6 +7,7 @@
 """HTTP Listener handler for sensor readings"""
 import asyncio
 import copy
+import json
 from datetime import datetime, timezone
 import os
 import ssl
@@ -90,13 +91,24 @@ _DEFAULT_CONFIG = {
         'order': '7',
         'displayName': 'Certificate Name'
     },
-    'enableCors': {
+    'enableCORS': {
         'description': 'Enable Cross Origin Resource Sharing',
         'type': 'boolean',
         'default': 'false',
         'order': '8',
         'displayName': 'Enable CORS'
     },
+    'headers': {
+        'description': 'CORS configuration options which is an optional set of fields expressed in JSON document. '
+                       'For example: {"Access-Control-Origin": "http://example.com", "Access-Control-Max-Age: 3600"}. '
+                       'Also note that specified headers are allowed: Access-Control-Allow-Origin, '
+                       'Access-Control-Allow-Credentials, Access-Control-Allow-Methods, Access-Control-Expose-Headers,'
+                       'Access-Control-Allow-Headers, Access-Control-Max-Age',
+        'type': 'JSON',
+        'default': '{}',
+        'order': '9',
+        'displayName': 'Headers'
+    }
 }
 
 
@@ -125,17 +137,45 @@ def plugin_init(config):
 
 
 def plugin_start(data):
-    def enable_cors(_app):
+    def enable_cors(_app, _conf):
         """ implements Cross Origin Resource Sharing (CORS) support """
         import aiohttp_cors
 
+        allow_origin = "*"
+        allow_methods = ["POST", "OPTIONS"]
+        allow_credentials = True
+        expose_headers = "*"
+        allow_headers = "*"
+        max_age = None
+        if _conf:
+            prefix = "Access-Control"
+            origin = "{}-Allow-Origin".format(prefix)
+            methods = "{}-Allow-Methods".format(prefix)
+            credentials = "{}-Allow-Credentials".format(prefix)
+            exp_headers = "{}-Expose-Headers".format(prefix)
+            al_headers = "{}-Allow-Headers".format(prefix)
+            age = "{}-Max-Age".format(prefix)
+            if origin in _conf:
+                allow_origin = _conf[origin]
+            if methods in _conf:
+                allow_methods = _conf[methods]
+            if credentials in _conf:
+                allow_credentials = True if _conf[credentials] == "true" else False
+            if exp_headers in _conf:
+                expose_headers = _conf[exp_headers]
+            if al_headers in _conf:
+                allow_headers = _conf[al_headers]
+            if age in _conf:
+                max_age = int(_conf[age])
+
         # Configure default CORS settings.
         cors = aiohttp_cors.setup(_app, defaults={
-            "*": aiohttp_cors.ResourceOptions(
-                allow_methods=["GET", "POST", "PUT", "DELETE"],
-                allow_credentials=True,
-                expose_headers="*",
-                allow_headers="*",
+            allow_origin: aiohttp_cors.ResourceOptions(
+                allow_methods=allow_methods,
+                allow_credentials=allow_credentials,
+                expose_headers=expose_headers,
+                allow_headers=allow_headers,
+                max_age=max_age
             )
         })
 
@@ -155,9 +195,10 @@ def plugin_start(data):
         http_south_ingest = HttpSouthIngest(config=data)
         app = web.Application(middlewares=[middleware.error_middleware], loop=loop)
         app.router.add_route('POST', '/{}'.format(uri), http_south_ingest.render_post)
-        if data['enableCors']['value'] == 'true':
-            # enable cors support
-            enable_cors(app)
+        if data['enableCORS']['value'] == 'true':
+            cors_header = data['headers']['value']
+            cors_options = cors_header if isinstance(cors_header, dict) else json.loads(cors_header)
+            enable_cors(app, cors_options)
         handler = app.make_handler(loop=loop)
 
         # SSL context
