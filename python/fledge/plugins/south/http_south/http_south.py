@@ -7,6 +7,7 @@
 """HTTP Listener handler for sensor readings"""
 import asyncio
 import copy
+import json
 from datetime import datetime, timezone
 import os
 import ssl
@@ -16,9 +17,7 @@ from aiohttp import web
 
 from fledge.common import logger
 from fledge.common.web import middleware
-from fledge.plugins.common import utils
 import async_ingest
-
 
 __author__ = "Amarendra K Sinha"
 __copyright__ = "Copyright (c) 2017 Dianomic Systems"
@@ -90,6 +89,23 @@ _DEFAULT_CONFIG = {
         'default': 'fledge',
         'order': '7',
         'displayName': 'Certificate Name'
+    },
+    'enableCORS': {
+        'description': 'Enable Cross Origin Resource Sharing',
+        'type': 'boolean',
+        'default': 'false',
+        'order': '8',
+        'displayName': 'Enable CORS'
+    },
+    'headers': {
+        'description': 'CORS configuration Access-Control-* response headers expressed in JSON document. '
+                       'For example: {"Access-Control-Origin": "http://example.com", '
+                       '"Access-Control-Allow-Headers": "*"}. ',
+        'type': 'JSON',
+        'default': '{}',
+        'order': '9',
+        'displayName': 'Response Headers',
+        "validity": "enableCORS == \"true\""
     }
 }
 
@@ -119,6 +135,53 @@ def plugin_init(config):
 
 
 def plugin_start(data):
+    def enable_cors(_app, _conf):
+        """ implements Cross Origin Resource Sharing (CORS) support """
+        import aiohttp_cors
+
+        # Default Resource options
+        allowed_origin = "*"
+        allowed_methods = ["POST", "OPTIONS"]
+        allowed_credentials = True
+        exposed_headers = "*"
+        allowed_headers = "*"
+        max_age = None
+        if _conf:
+            # Overwrite resource options
+            headers_prefix = "Access-Control"
+            origin = "{}-Allow-Origin".format(headers_prefix)
+            methods = "{}-Allow-Methods".format(headers_prefix)
+            credentials = "{}-Allow-Credentials".format(headers_prefix)
+            exp_headers = "{}-Expose-Headers".format(headers_prefix)
+            al_headers = "{}-Allow-Headers".format(headers_prefix)
+            age = "{}-Max-Age".format(headers_prefix)
+            if origin in _conf:
+                allowed_origin = _conf[origin]
+            if methods in _conf:
+                allowed_methods = _conf[methods]
+            if credentials in _conf:
+                allowed_credentials = True if _conf[credentials] else False
+            if exp_headers in _conf:
+                exposed_headers = (_conf[exp_headers],)
+            if al_headers in _conf:
+                allowed_headers = (_conf[al_headers],)
+            if age in _conf:
+                max_age = int(_conf[age])
+
+        # Configure CORS settings.
+        cors = aiohttp_cors.setup(_app, defaults={
+            allowed_origin: aiohttp_cors.ResourceOptions(
+                allow_methods=allowed_methods,
+                allow_credentials=allowed_credentials,
+                expose_headers=exposed_headers,
+                allow_headers=allowed_headers,
+                max_age=max_age
+            )})
+
+        # Configure CORS on routes.
+        for route in list(_app.router.routes()):
+            cors.add(route)
+
     global loop, t
     _LOGGER.info("plugin_start called")
 
@@ -131,6 +194,10 @@ def plugin_start(data):
         http_south_ingest = HttpSouthIngest(config=data)
         app = web.Application(middlewares=[middleware.error_middleware], loop=loop)
         app.router.add_route('POST', '/{}'.format(uri), http_south_ingest.render_post)
+        if data['enableCORS']['value'] == 'true':
+            cors_header = data['headers']['value']
+            cors_options = cors_header if isinstance(cors_header, dict) else json.loads(cors_header)
+            enable_cors(app, cors_options)
         handler = app.make_handler(loop=loop)
 
         # SSL context
@@ -157,6 +224,7 @@ def plugin_start(data):
             """ <Server sockets=
             [<socket.socket fd=17, family=AddressFamily.AF_INET, type=2049,proto=6, laddr=('0.0.0.0', 6683)>]>"""
             data['server'] = f.result()
+
         future.add_done_callback(f_callback)
 
         def run():
