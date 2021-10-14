@@ -19,7 +19,6 @@ from fledge.common import logger
 from fledge.common.web import middleware
 import async_ingest
 
-
 __author__ = "Amarendra K Sinha"
 __copyright__ = "Copyright (c) 2017 Dianomic Systems"
 __license__ = "Apache 2.0"
@@ -99,15 +98,14 @@ _DEFAULT_CONFIG = {
         'displayName': 'Enable CORS'
     },
     'headers': {
-        'description': 'CORS configuration options which is an optional set of fields expressed in JSON document. '
-                       'For example: {"Access-Control-Origin": "http://example.com", "Access-Control-Max-Age: 3600"}. '
-                       'Also note that specified headers are allowed: Access-Control-Allow-Origin, '
-                       'Access-Control-Allow-Credentials, Access-Control-Allow-Methods, Access-Control-Expose-Headers,'
-                       'Access-Control-Allow-Headers, Access-Control-Max-Age',
+        'description': 'CORS configuration Access-Control-* response headers expressed in JSON document. '
+                       'For example: {"Access-Control-Origin": "http://example.com", '
+                       '"Access-Control-Allow-Headers": "*"}. ',
         'type': 'JSON',
         'default': '{}',
         'order': '9',
-        'displayName': 'Headers'
+        'displayName': 'Response Headers',
+        "validity": "enableCORS == \"true\""
     }
 }
 
@@ -141,43 +139,44 @@ def plugin_start(data):
         """ implements Cross Origin Resource Sharing (CORS) support """
         import aiohttp_cors
 
-        allow_origin = "*"
-        allow_methods = ["POST", "OPTIONS"]
-        allow_credentials = True
-        expose_headers = "*"
-        allow_headers = "*"
+        # Default Resource options
+        allowed_origin = "*"
+        allowed_methods = ["POST", "OPTIONS"]
+        allowed_credentials = True
+        exposed_headers = "*"
+        allowed_headers = "*"
         max_age = None
         if _conf:
-            prefix = "Access-Control"
-            origin = "{}-Allow-Origin".format(prefix)
-            methods = "{}-Allow-Methods".format(prefix)
-            credentials = "{}-Allow-Credentials".format(prefix)
-            exp_headers = "{}-Expose-Headers".format(prefix)
-            al_headers = "{}-Allow-Headers".format(prefix)
-            age = "{}-Max-Age".format(prefix)
+            # Overwrite resource options
+            headers_prefix = "Access-Control"
+            origin = "{}-Allow-Origin".format(headers_prefix)
+            methods = "{}-Allow-Methods".format(headers_prefix)
+            credentials = "{}-Allow-Credentials".format(headers_prefix)
+            exp_headers = "{}-Expose-Headers".format(headers_prefix)
+            al_headers = "{}-Allow-Headers".format(headers_prefix)
+            age = "{}-Max-Age".format(headers_prefix)
             if origin in _conf:
-                allow_origin = _conf[origin]
+                allowed_origin = _conf[origin]
             if methods in _conf:
-                allow_methods = _conf[methods]
+                allowed_methods = _conf[methods]
             if credentials in _conf:
-                allow_credentials = True if _conf[credentials] == "true" else False
+                allowed_credentials = True if _conf[credentials] else False
             if exp_headers in _conf:
-                expose_headers = _conf[exp_headers]
+                exposed_headers = (_conf[exp_headers],)
             if al_headers in _conf:
-                allow_headers = _conf[al_headers]
+                allowed_headers = (_conf[al_headers],)
             if age in _conf:
                 max_age = int(_conf[age])
 
-        # Configure default CORS settings.
+        # Configure CORS settings.
         cors = aiohttp_cors.setup(_app, defaults={
-            allow_origin: aiohttp_cors.ResourceOptions(
-                allow_methods=allow_methods,
-                allow_credentials=allow_credentials,
-                expose_headers=expose_headers,
-                allow_headers=allow_headers,
+            allowed_origin: aiohttp_cors.ResourceOptions(
+                allow_methods=allowed_methods,
+                allow_credentials=allowed_credentials,
+                expose_headers=exposed_headers,
+                allow_headers=allowed_headers,
                 max_age=max_age
-            )
-        })
+            )})
 
         # Configure CORS on routes.
         for route in list(_app.router.routes()):
@@ -225,6 +224,7 @@ def plugin_start(data):
             """ <Server sockets=
             [<socket.socket fd=17, family=AddressFamily.AF_INET, type=2049,proto=6, laddr=('0.0.0.0', 6683)>]>"""
             data['server'] = f.result()
+
         future.add_done_callback(f_callback)
 
         def run():
