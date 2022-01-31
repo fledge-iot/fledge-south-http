@@ -284,7 +284,12 @@ def plugin_shutdown(handle):
             asyncio.ensure_future(app.shutdown(), loop=loop)
             asyncio.ensure_future(handler.shutdown(60.0), loop=loop)
             asyncio.ensure_future(app.cleanup(), loop=loop)
-            pending = asyncio.Task.all_tasks()
+            try:
+                pending = asyncio.all_tasks()
+            except AttributeError:
+                # For compatibility with python versions 3.6 or earlier.
+                # asyncio.Task.all_tasks() is fully moved to asyncio.all_tasks() starting with 3.9; also applies to current_task.
+                pending = asyncio.Task.all_tasks()
             if len(pending):
                 loop.run_until_complete(asyncio.gather(*pending))
     except (RuntimeError, asyncio.CancelledError):
