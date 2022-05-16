@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 import os
 import ssl
 import logging
+import base64
+
 from threading import Thread
 from aiohttp import web
 
@@ -344,8 +346,12 @@ def json_numpy_obj_hook(dct):
     :return: (ndarray) if input was an encoded ndarray
     """
     if isinstance(dct, dict) and '__ndarray__' in dct:
-        return np.array(dct['__ndarray__'], dct['dtype']).reshape(dct['shape'])
-        # return np.frombuffer(data, dct['dtype']).reshape(dct['shape'])
+        data = dct['__ndarray__']
+        if isinstance(data, str):
+            data = data.encode(encoding='UTF-8')
+        data = base64.b64decode(data)
+        return np.frombuffer(data, dct['dtype']).reshape(dct['shape'])
+
     return dct
 
 
