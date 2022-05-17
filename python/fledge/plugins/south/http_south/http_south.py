@@ -12,8 +12,12 @@ from datetime import datetime, timezone
 import os
 import ssl
 import logging
+import base64
+
 from threading import Thread
 from aiohttp import web
+
+import numpy as np
 
 from fledge.common import logger
 from fledge.common.web import middleware
@@ -192,7 +196,7 @@ def plugin_start(data):
         uri = data['uri']['value']
 
         http_south_ingest = HttpSouthIngest(config=data)
-        app = web.Application(middlewares=[middleware.error_middleware], loop=loop)
+        app = web.Application(middlewares=[middleware.error_middleware], loop=loop, client_max_size=1024**3)
         app.router.add_route('POST', '/{}'.format(uri), http_south_ingest.render_post)
         if data['enableCORS']['value'] == 'true':
             cors_header = data['headers']['value']
@@ -335,6 +339,22 @@ def get_certificate(cert_name):
     return cert, key
 
 
+def json_numpy_obj_hook(dct):
+    """Decodes a previously encoded numpy ndarray with proper shape and dtype.
+
+    :param dct: (dict) json encoded ndarray
+    :return: (ndarray) if input was an encoded ndarray
+    """
+    if isinstance(dct, dict) and '__ndarray__' in dct:
+        data = dct['__ndarray__']
+        if isinstance(data, str):
+            data = data.encode(encoding='UTF-8')
+        data = base64.b64decode(data)
+        return np.frombuffer(data, dct['dtype']).reshape(dct['shape'])
+
+    return dct
+
+
 class HttpSouthIngest(object):
     """Handles incoming sensor readings from HTTP Listener"""
 
@@ -391,6 +411,10 @@ class HttpSouthIngest(object):
                 # TODO: confirm, do we want to check this?
                 if not isinstance(readings, dict):
                     raise ValueError('readings must be a dictionary')
+
+                for dp,dpv in readings.items():
+                    if '__ndarray__' in dpv:
+                        readings[dp] = json.loads(dpv, object_hook=json_numpy_obj_hook)
 
                 data = {
                     'asset': asset,
