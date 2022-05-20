@@ -413,6 +413,9 @@ class HttpSouthIngest(object):
                     raise ValueError('readings must be a dictionary')
 
                 for dp,dpv in readings.items():
+                    if not isinstance(dpv, dict):
+                        continue
+
                     if '__ndarray__' in dpv:
                         readings[dp] = json.loads(dpv, object_hook=json_numpy_obj_hook)
 
