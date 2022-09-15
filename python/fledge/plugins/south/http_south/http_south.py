@@ -7,18 +7,21 @@
 """HTTP Listener handler for sensor readings"""
 import asyncio
 import copy
+import json
 from datetime import datetime, timezone
 import os
 import ssl
 import logging
+import base64
+
 from threading import Thread
 from aiohttp import web
 
+import numpy as np
+
 from fledge.common import logger
 from fledge.common.web import middleware
-from fledge.plugins.common import utils
 import async_ingest
-
 
 __author__ = "Amarendra K Sinha"
 __copyright__ = "Copyright (c) 2017 Dianomic Systems"
@@ -90,6 +93,23 @@ _DEFAULT_CONFIG = {
         'default': 'fledge',
         'order': '7',
         'displayName': 'Certificate Name'
+    },
+    'enableCORS': {
+        'description': 'Enable Cross Origin Resource Sharing',
+        'type': 'boolean',
+        'default': 'false',
+        'order': '8',
+        'displayName': 'Enable CORS'
+    },
+    'headers': {
+        'description': 'CORS configuration Access-Control-* response headers expressed in JSON document. '
+                       'For example: {"Access-Control-Origin": "http://example.com", '
+                       '"Access-Control-Allow-Headers": "*"}. ',
+        'type': 'JSON',
+        'default': '{}',
+        'order': '9',
+        'displayName': 'Response Headers',
+        "validity": "enableCORS == \"true\""
     }
 }
 
@@ -97,7 +117,7 @@ _DEFAULT_CONFIG = {
 def plugin_info():
     return {
         'name': 'HTTP South Listener',
-        'version': '1.9.2',
+        'version': '2.0.0',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
@@ -119,6 +139,53 @@ def plugin_init(config):
 
 
 def plugin_start(data):
+    def enable_cors(_app, _conf):
+        """ implements Cross Origin Resource Sharing (CORS) support """
+        import aiohttp_cors
+
+        # Default Resource options
+        allowed_origin = "*"
+        allowed_methods = ["POST", "OPTIONS"]
+        allowed_credentials = True
+        exposed_headers = "*"
+        allowed_headers = "*"
+        max_age = None
+        if _conf:
+            # Overwrite resource options
+            headers_prefix = "Access-Control"
+            origin = "{}-Allow-Origin".format(headers_prefix)
+            methods = "{}-Allow-Methods".format(headers_prefix)
+            credentials = "{}-Allow-Credentials".format(headers_prefix)
+            exp_headers = "{}-Expose-Headers".format(headers_prefix)
+            al_headers = "{}-Allow-Headers".format(headers_prefix)
+            age = "{}-Max-Age".format(headers_prefix)
+            if origin in _conf:
+                allowed_origin = _conf[origin]
+            if methods in _conf:
+                allowed_methods = _conf[methods]
+            if credentials in _conf:
+                allowed_credentials = True if _conf[credentials] else False
+            if exp_headers in _conf:
+                exposed_headers = (_conf[exp_headers],)
+            if al_headers in _conf:
+                allowed_headers = (_conf[al_headers],)
+            if age in _conf:
+                max_age = int(_conf[age])
+
+        # Configure CORS settings.
+        cors = aiohttp_cors.setup(_app, defaults={
+            allowed_origin: aiohttp_cors.ResourceOptions(
+                allow_methods=allowed_methods,
+                allow_credentials=allowed_credentials,
+                expose_headers=exposed_headers,
+                allow_headers=allowed_headers,
+                max_age=max_age
+            )})
+
+        # Configure CORS on routes.
+        for route in list(_app.router.routes()):
+            cors.add(route)
+
     global loop, t
     _LOGGER.info("plugin_start called")
 
@@ -129,8 +196,12 @@ def plugin_start(data):
         uri = data['uri']['value']
 
         http_south_ingest = HttpSouthIngest(config=data)
-        app = web.Application(middlewares=[middleware.error_middleware], loop=loop)
+        app = web.Application(middlewares=[middleware.error_middleware], loop=loop, client_max_size=1024**3)
         app.router.add_route('POST', '/{}'.format(uri), http_south_ingest.render_post)
+        if data['enableCORS']['value'] == 'true':
+            cors_header = data['headers']['value']
+            cors_options = cors_header if isinstance(cors_header, dict) else json.loads(cors_header)
+            enable_cors(app, cors_options)
         handler = app.make_handler(loop=loop)
 
         # SSL context
@@ -157,6 +228,7 @@ def plugin_start(data):
             """ <Server sockets=
             [<socket.socket fd=17, family=AddressFamily.AF_INET, type=2049,proto=6, laddr=('0.0.0.0', 6683)>]>"""
             data['server'] = f.result()
+
         future.add_done_callback(f_callback)
 
         def run():
@@ -216,7 +288,12 @@ def plugin_shutdown(handle):
             asyncio.ensure_future(app.shutdown(), loop=loop)
             asyncio.ensure_future(handler.shutdown(60.0), loop=loop)
             asyncio.ensure_future(app.cleanup(), loop=loop)
-            pending = asyncio.Task.all_tasks()
+            try:
+                pending = asyncio.all_tasks()
+            except AttributeError:
+                # For compatibility with python versions 3.6 or earlier.
+                # asyncio.Task.all_tasks() is fully moved to asyncio.all_tasks() starting with 3.9; also applies to current_task.
+                pending = asyncio.Task.all_tasks()
             if len(pending):
                 loop.run_until_complete(asyncio.gather(*pending))
     except (RuntimeError, asyncio.CancelledError):
@@ -260,6 +337,22 @@ def get_certificate(cert_name):
             raise RuntimeError
 
     return cert, key
+
+
+def json_numpy_obj_hook(dct):
+    """Decodes a previously encoded numpy ndarray with proper shape and dtype.
+
+    :param dct: (dict) json encoded ndarray
+    :return: (ndarray) if input was an encoded ndarray
+    """
+    if isinstance(dct, dict) and '__ndarray__' in dct:
+        data = dct['__ndarray__']
+        if isinstance(data, str):
+            data = data.encode(encoding='UTF-8')
+        data = base64.b64decode(data)
+        return np.frombuffer(data, dct['dtype']).reshape(dct['shape'])
+
+    return dct
 
 
 class HttpSouthIngest(object):
@@ -318,6 +411,13 @@ class HttpSouthIngest(object):
                 # TODO: confirm, do we want to check this?
                 if not isinstance(readings, dict):
                     raise ValueError('readings must be a dictionary')
+
+                for dp,dpv in readings.items():
+                    if not isinstance(dpv, dict):
+                        continue
+
+                    if '__ndarray__' in dpv:
+                        readings[dp] = json.loads(dpv, object_hook=json_numpy_obj_hook)
 
                 data = {
                     'asset': asset,

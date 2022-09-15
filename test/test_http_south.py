@@ -76,7 +76,7 @@ def mock_request(data, loop):
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
-        'version': '1.9.2',
+        'version': '2.0.0',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
