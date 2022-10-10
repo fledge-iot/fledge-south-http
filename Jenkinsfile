@@ -2,51 +2,51 @@ timestamps {
     node("ubuntu18-agent") {
         catchError {
             checkout scm   
-            dir_exist= sh (
+            dir_exists = sh (
 		        script: "test -d 'tests' && echo 'Y' || echo 'N' ",
                 returnStdout: true
             ).trim()
 
-            if (dir_exist == 'N'){
+            if (dir_exists == 'N'){
                 currentBuild.result= 'FAILURE'
                 echo "No tests directory found! Exiting."
                 return
             }
-            // Set BRANCH to specific branch of fledge repo, in case you want to run the tests against specific code
-            // e.g. FOGL-xxxx, main etc.
+
             try {
                 stage("Prerequisites"){
+                    // Change to corresponding BRANCH as required
+                    // e.g. FOGL-xxxx, main etc.
                     sh '''
                         BRANCH='develop'
-                        ${HOME}/buildFledge.sh ${BRANCH} ${WORKSPACE}
+                        ${HOME}/buildFledge ${BRANCH} ${WORKSPACE}
                     '''
                 }
             } catch (e) {
                 currentBuild.result = 'FAILURE'
-                echo "Failed to build Fledge; required to run the tests."
+                echo "Failed to build Fledge; required to run the tests!"
                 return
             }
             
             try {
-                stage("Run tests"){
+                stage("Run Tests"){
                     echo "Executing tests..."
                     sh '''
                         . ${WORKSPACE}/PLUGIN_PR_ENV/bin/activate
                         export FLEDGE_ROOT=$HOME/fledge && export PYTHONPATH=$HOME/fledge/python
-                        cd tests && python3 -m pytest -vv --ignore=system --ignore=api --junit-xml=test_output.xml
+                        cd tests && python3 -m pytest -vv --ignore=system --ignore=api --junit-xml=test_result.xml
                     '''
                     echo "Done."
                 }
             } catch (e) {
-                result = "TEST FAILED" 
+                result = "TESTS FAILED" 
                 currentBuild.result = 'FAILURE'
-                echo "Tests failed."
+                echo "Tests failed!"
             }
             
             try {
-                stage("Publish Report"){
-                    echo "Archiving XML Repport"
-                    archiveArtifacts "tests/test_output.xml"
+                stage("Publish Test Report"){
+                    archiveArtifacts "tests/test_result.xml"
                 }
             } catch (e) {
                 result = "TEST REPORT GENERATION FAILED"
