@@ -46,7 +46,7 @@ timestamps {
             
             try {
                 stage("Publish Test Report"){
-                    archiveArtifacts "tests/test_result.xml"
+                    junit "tests/test_result.xml"
                 }
             } catch (e) {
                 result = "TEST REPORT GENERATION FAILED"
