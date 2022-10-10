@@ -33,7 +33,7 @@ timestamps {
                     sh '''
                         . ${WORKSPACE}/PLUGIN_PR_ENV/bin/activate
                         export FLEDGE_ROOT=$HOME/fledge && export PYTHONPATH=$HOME/fledge/python
-                        cd tests && python3 -m pytest -vv --ignore=system* --ignore=api --junit-xml=test_output.xml
+                        cd tests && python3 -m pytest -vv --ignore=system --ignore=api --junit-xml=test_output.xml
                     '''
                     echo "Done."
                 }
