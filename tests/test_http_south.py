@@ -83,52 +83,37 @@ def test_plugin_init():
     assert http_south.plugin_init(config) == config
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
-def test_plugin_start(mocker, unused_port):
+def test_plugin_start():
     # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
     config_data['port']['value'] = config_data['port']['default']
     config_data['host']['value'] = config_data['host']['default']
     config_data['uri']['value'] = config_data['uri']['default']
     config_data['enableHttp']['value'] = config_data['enableHttp']['default']
+    config_data['enableCORS']['value'] = config_data['enableCORS']['default']
 
     # WHEN
-    http_south.plugin_start(config_data)
+    with patch.object(http_south._LOGGER, 'info') as patch_log_info:
+        http_south.plugin_start(config_data)
+        # THEN
+        assert isinstance(config_data['app'], aiohttp.web.Application)
+        assert isinstance(config_data['handler'], aiohttp.web_server.Server)
+        # assert isinstance(config_data['server'], asyncio.base_events.Server)
+        http_south.loop.stop()
+        http_south.t._delete()
+    assert 1 == patch_log_info.call_count
+    patch_log_info.assert_called_with("plugin_start called")
 
-    # THEN
-    assert isinstance(config_data['app'], aiohttp.web.Application)
-    assert isinstance(config_data['handler'], aiohttp.web_server.Server)
-    # assert isinstance(config_data['server'], asyncio.base_events.Server)
-    http_south.loop.stop()
-    http_south.t._delete()
 
-
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
-def test_plugin_start_exception(unused_port, mocker):
-    # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
+def test_plugin_start_exception():
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
-    log_exception = mocker.patch.object(http_south._LOGGER, "exception")
-
-    # WHEN
-    http_south.plugin_start(config_data)
-
-    # THEN
-    assert 1 == log_exception.call_count
-    log_exception.assert_called_with("'value'")
+    with patch.object(http_south._LOGGER, 'info') as patch_log_info:
+        with patch.object(http_south._LOGGER, 'exception') as patch_log_exception:
+            http_south.plugin_start(config_data)
+        assert 1 == patch_log_exception.call_count
+        patch_log_exception.assert_called_with("'value'")
+    assert 1 == patch_log_info.call_count
+    patch_log_info.assert_called_with("plugin_start called")
 
 
 @pytest.allure.feature("unit")
