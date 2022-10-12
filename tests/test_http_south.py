@@ -4,7 +4,6 @@
 # See: http://fledge-iot.readthedocs.io/
 # FLEDGE_END
 
-"""Unit test for fledge.plugins.south.http_south.http_south"""
 import copy
 import json
 from unittest import mock
@@ -15,16 +14,14 @@ from aiohttp.test_utils import make_mocked_request
 from aiohttp.streams import StreamReader
 from multidict import CIMultiDict
 from python.fledge.plugins.south.http_south import http_south
-from python.fledge.plugins.south.http_south.http_south import HttpSouthIngest, async_ingest, c_callback, c_ingest_ref, _DEFAULT_CONFIG as config
+from python.fledge.plugins.south.http_south.http_south import HttpSouthIngest, async_ingest, _DEFAULT_CONFIG as config
 
-__author__ = "Amarendra K Sinha"
-__copyright__ = "Copyright (c) 2017 Dianomic Systems"
+__author__ = "Amarendra K Sinha, Ashish Jabble"
+__copyright__ = "Copyright (c) 2017-2022 Dianomic Systems Inc."
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
 
 
-_CONFIG_CATEGORY_NAME = 'HTTP_SOUTH'
-_CONFIG_CATEGORY_DESCRIPTION = 'South Plugin HTTP Listener'
 _NEW_CONFIG = {
     'plugin': {
         'description': 'South Plugin HTTP Listener',
@@ -71,8 +68,6 @@ def mock_request(data, loop):
     return req
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
@@ -84,8 +79,6 @@ def test_plugin_info():
     }
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_init():
     assert http_south.plugin_init(config) == config
 
