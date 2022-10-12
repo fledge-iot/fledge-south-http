@@ -21,7 +21,6 @@ __copyright__ = "Copyright (c) 2017-2022 Dianomic Systems Inc."
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
 
-
 _NEW_CONFIG = {
     'plugin': {
         'description': 'South Plugin HTTP Listener',
@@ -32,16 +31,31 @@ _NEW_CONFIG = {
         'description': 'Port to listen on',
         'type': 'integer',
         'default': '1234',
+        'value': '4321'
     },
     'host': {
         'description': 'Address to accept data on',
         'type': 'string',
         'default': 'localhost',
+        'value': '127.0.0.1'
     },
     'uri': {
         'description': 'URI to accept data on',
         'type': 'string',
         'default': 'sensor-reading',
+        'value': 'sensor-reading'
+    },
+    'enableHttp': {
+        'description': 'Enable HTTP (Set false to use HTTPS)',
+        'type': 'boolean',
+        'default': 'true',
+        'value': 'true'
+    },
+    'enableCORS': {
+        'description': 'Enable Cross Origin Resource Sharing',
+        'type': 'boolean',
+        'default': 'false',
+        'value': 'false'
     }
 }
 
@@ -116,31 +130,26 @@ def test_plugin_start_exception():
     patch_log_info.assert_called_with("plugin_start called")
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
-def test_plugin_reconfigure(mocker, unused_port):
+def test_plugin_reconfigure():
     # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
     config_data['port']['value'] = config_data['port']['default']
     config_data['host']['value'] = config_data['host']['default']
     config_data['uri']['value'] = config_data['uri']['default']
     config_data['enableHttp']['value'] = config_data['enableHttp']['default']
-    pstop = mocker.patch.object(http_south, '_plugin_stop', return_value=True)
-    log_info = mocker.patch.object(http_south._LOGGER, "info")
-
-    # WHEN
-    new_config = http_south.plugin_reconfigure(config_data, _NEW_CONFIG)
-
-    # THEN
-    assert _NEW_CONFIG == new_config
-    assert 3 == log_info.call_count
-    assert 1 == pstop.call_count
+    config_data['enableCORS']['value'] = config_data['enableCORS']['default']
+    with patch.object(http_south, 'plugin_shutdown', return_value=True) as patch_shutdown:
+        with patch.object(http_south, 'plugin_init', return_value=_NEW_CONFIG) as patch_init:
+            with patch.object(http_south, 'plugin_start', return_value=True) as patch_start:
+                with patch.object(http_south._LOGGER, 'info') as patch_log_info:
+                    # WHEN
+                    new_config = http_south.plugin_reconfigure(config_data, _NEW_CONFIG)
+                    # THEN
+                    assert _NEW_CONFIG == new_config
+                assert 1 == patch_log_info.call_count
+            assert 1 == patch_start.call_count
+        assert 1 == patch_init.call_count
+    assert 1 == patch_shutdown.call_count
 
 
 @pytest.allure.feature("unit")
