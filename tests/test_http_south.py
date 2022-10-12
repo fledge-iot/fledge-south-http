@@ -154,35 +154,6 @@ def test_plugin_reconfigure():
 
 @pytest.allure.feature("unit")
 @pytest.allure.story("plugin", "south", "http")
-def test_plugin__stop(mocker, unused_port, loop):
-    # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
-    config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
-    config_data['port']['value'] = config_data['port']['default']
-    config_data['host']['value'] = config_data['host']['default']
-    config_data['uri']['value'] = config_data['uri']['default']
-    config_data['enableHttp']['value'] = config_data['enableHttp']['default']
-    log_exception = mocker.patch.object(http_south._LOGGER, "exception")
-    log_info = mocker.patch.object(http_south._LOGGER, "info")
-
-    # WHEN
-    http_south.plugin_start(config_data)
-    http_south._plugin_stop(config_data)
-
-    # THEN
-    assert 2 == log_info.call_count
-    calls = [call('Stopping South HTTP plugin.')]
-    log_info.assert_has_calls(calls, any_order=True)
-    assert 0 == log_exception.call_count
-
-
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_shutdown(mocker, unused_port):
     # GIVEN
     port = {
