@@ -10,21 +10,20 @@ import json
 from unittest import mock
 from unittest.mock import call, patch
 import pytest
+
 import aiohttp.web_exceptions
 from aiohttp.test_utils import make_mocked_request
 from aiohttp.streams import StreamReader
 from multidict import CIMultiDict
 from python.fledge.plugins.south.http_south import http_south
-from python.fledge.plugins.south.http_south.http_south import HttpSouthIngest, async_ingest, c_callback, c_ingest_ref, _DEFAULT_CONFIG as config
+from python.fledge.plugins.south.http_south.http_south import HttpSouthIngest, async_ingest, _DEFAULT_CONFIG as config
 
-__author__ = "Amarendra K Sinha"
-__copyright__ = "Copyright (c) 2017 Dianomic Systems"
+__author__ = "Amarendra K Sinha, Ashish Jabble"
+__copyright__ = "Copyright (c) 2017-2022 Dianomic Systems Inc."
 __license__ = "Apache 2.0"
 __version__ = "${VERSION}"
 
 
-_CONFIG_CATEGORY_NAME = 'HTTP_SOUTH'
-_CONFIG_CATEGORY_DESCRIPTION = 'South Plugin HTTP Listener'
 _NEW_CONFIG = {
     'plugin': {
         'description': 'South Plugin HTTP Listener',
@@ -35,16 +34,31 @@ _NEW_CONFIG = {
         'description': 'Port to listen on',
         'type': 'integer',
         'default': '1234',
+        'value': '4321'
     },
     'host': {
         'description': 'Address to accept data on',
         'type': 'string',
         'default': 'localhost',
+        'value': '127.0.0.1'
     },
     'uri': {
         'description': 'URI to accept data on',
         'type': 'string',
         'default': 'sensor-reading',
+        'value': 'sensor-reading'
+    },
+    'enableHttp': {
+        'description': 'Enable HTTP (Set false to use HTTPS)',
+        'type': 'boolean',
+        'default': 'true',
+        'value': 'true'
+    },
+    'enableCORS': {
+        'description': 'Enable Cross Origin Resource Sharing',
+        'type': 'boolean',
+        'default': 'false',
+        'value': 'false'
     }
 }
 
@@ -58,21 +72,6 @@ def test_plugin_contract():
     assert callable(getattr(http_south, 'plugin_reconfigure'))
 
 
-def mock_request(data, loop):
-    payload = StreamReader(loop=loop)
-    payload.feed_data(data.encode())
-    payload.feed_eof()
-
-    protocol = mock.Mock()
-    app = mock.Mock()
-    headers = CIMultiDict([('CONTENT-TYPE', 'application/json')])
-    req = make_mocked_request('POST', '/sensor-reading', headers=headers,
-                              protocol=protocol, payload=payload, app=app)
-    return req
-
-
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
@@ -84,14 +83,10 @@ def test_plugin_info():
     }
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_init():
     assert http_south.plugin_init(config) == config
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_start(mocker, unused_port):
     # GIVEN
     port = {
@@ -100,16 +95,20 @@ def test_plugin_start(mocker, unused_port):
         'default': str(unused_port()),
     }
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
+    #mocker.patch.dict(config_data, {'port': port})
     config_data['port']['value'] = config_data['port']['default']
     config_data['host']['value'] = config_data['host']['default']
     config_data['uri']['value'] = config_data['uri']['default']
     config_data['enableHttp']['value'] = config_data['enableHttp']['default']
+    config_data['enableCORS']['value'] = config_data['enableCORS']['default']
 
     # WHEN
+    log_info = mocker.patch.object(http_south._LOGGER, "info")
     http_south.plugin_start(config_data)
 
     # THEN
+    assert 1 == log_info.call_count
+    log_info.assert_called_with("plugin_start called")
     assert isinstance(config_data['app'], aiohttp.web.Application)
     assert isinstance(config_data['handler'], aiohttp.web_server.Server)
     # assert isinstance(config_data['server'], asyncio.base_events.Server)
@@ -117,17 +116,10 @@ def test_plugin_start(mocker, unused_port):
     http_south.t._delete()
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
-def test_plugin_start_exception(unused_port, mocker):
+def test_plugin_start_exception(mocker):
     # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
+    mocker.patch.object(http_south._LOGGER, "info")
     log_exception = mocker.patch.object(http_south._LOGGER, "exception")
 
     # WHEN
@@ -138,8 +130,6 @@ def test_plugin_start_exception(unused_port, mocker):
     log_exception.assert_called_with("'value'")
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_reconfigure(mocker, unused_port):
     # GIVEN
     port = {
@@ -148,54 +138,27 @@ def test_plugin_reconfigure(mocker, unused_port):
         'default': str(unused_port()),
     }
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
+    #mocker.patch.dict(config_data, {'port': port})
     config_data['port']['value'] = config_data['port']['default']
     config_data['host']['value'] = config_data['host']['default']
     config_data['uri']['value'] = config_data['uri']['default']
     config_data['enableHttp']['value'] = config_data['enableHttp']['default']
-    pstop = mocker.patch.object(http_south, '_plugin_stop', return_value=True)
+    config_data['enableCORS']['value'] = config_data['enableCORS']['default']
+    p_shutdown = mocker.patch.object(http_south, 'plugin_shutdown', return_value=True)
+    p_init = mocker.patch.object(http_south, 'plugin_init', return_value=_NEW_CONFIG)
+    p_start = mocker.patch.object(http_south, 'plugin_start', return_value=True)
     log_info = mocker.patch.object(http_south._LOGGER, "info")
 
     # WHEN
     new_config = http_south.plugin_reconfigure(config_data, _NEW_CONFIG)
-
     # THEN
+    assert 1 == p_shutdown.call_count
+    assert 1 == p_init.call_count
+    assert 1 == p_start.call_count
     assert _NEW_CONFIG == new_config
-    assert 3 == log_info.call_count
-    assert 1 == pstop.call_count
+    assert 1 == log_info.call_count
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
-def test_plugin__stop(mocker, unused_port, loop):
-    # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
-    config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
-    config_data['port']['value'] = config_data['port']['default']
-    config_data['host']['value'] = config_data['host']['default']
-    config_data['uri']['value'] = config_data['uri']['default']
-    config_data['enableHttp']['value'] = config_data['enableHttp']['default']
-    log_exception = mocker.patch.object(http_south._LOGGER, "exception")
-    log_info = mocker.patch.object(http_south._LOGGER, "info")
-
-    # WHEN
-    http_south.plugin_start(config_data)
-    http_south._plugin_stop(config_data)
-
-    # THEN
-    assert 2 == log_info.call_count
-    calls = [call('Stopping South HTTP plugin.')]
-    log_info.assert_has_calls(calls, any_order=True)
-    assert 0 == log_exception.call_count
-
-
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 def test_plugin_shutdown(mocker, unused_port):
     # GIVEN
     port = {
@@ -209,7 +172,7 @@ def test_plugin_shutdown(mocker, unused_port):
     config_data['host']['value'] = config_data['host']['default']
     config_data['uri']['value'] = config_data['uri']['default']
     config_data['enableHttp']['value'] = config_data['enableHttp']['default']
-    log_exception = mocker.patch.object(http_south._LOGGER, "exception")
+    config_data['enableCORS']['value'] = config_data['enableCORS']['default']
     log_info = mocker.patch.object(http_south._LOGGER, "info")
 
     # WHEN
@@ -217,15 +180,11 @@ def test_plugin_shutdown(mocker, unused_port):
     http_south.plugin_shutdown(config_data)
 
     # THEN
-    assert 3 == log_info.call_count
-    calls = [call('Stopping South HTTP plugin.'),
-             call('South HTTP plugin shut down.')]
+    assert 2 == log_info.call_count
+    calls = [call('South HTTP plugin shut down.')]
     log_info.assert_has_calls(calls, any_order=True)
-    assert 0 == log_exception.call_count
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 @pytest.mark.skip(reason="server object is None in tests. To be investigated.")
 def test_plugin_shutdown_error(mocker, unused_port, loop):
     # GIVEN
@@ -257,11 +216,23 @@ def test_plugin_shutdown_error(mocker, unused_port, loop):
     assert 1 == log_exception.call_count
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("services", "south", "ingest")
 class TestHttpSouthIngest(object):
     """Unit tests fledge.plugins.south.http_south.http_south.HttpSouthIngest
     """
+
+    def mock_request(self, data, loop):
+        payload = StreamReader(loop=loop, limit=1, protocol=aiohttp.base_protocol.BaseProtocol(loop))
+        payload.feed_data(data.encode())
+        payload.feed_eof()
+
+        protocol = mock.Mock()
+        app = mock.Mock()
+        headers = CIMultiDict([('CONTENT-TYPE', 'application/json')])
+        req = make_mocked_request('POST', '/sensor-reading', headers=headers,
+                                  protocol=protocol, payload=payload, app=app)
+
+        return req
+
     @pytest.mark.asyncio
     async def test_render_post_reading_ok(self, loop):
         data = """[{
@@ -276,8 +247,9 @@ class TestHttpSouthIngest(object):
                 }
             }
         }]"""
+
         with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            request = mock_request(data, loop)
+            request = self.mock_request(data, loop)
             config_data = copy.deepcopy(config)
             config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
             r = await HttpSouthIngest(config_data).render_post(request)
@@ -302,7 +274,7 @@ class TestHttpSouthIngest(object):
             }
         }]"""
         with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            request = mock_request(data, loop)
+            request = self.mock_request(data, loop)
             config_data = copy.deepcopy(config)
             config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
             r = await HttpSouthIngest(config_data).render_post(request)
@@ -319,7 +291,7 @@ class TestHttpSouthIngest(object):
         with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
             with patch.object(http_south._LOGGER, 'exception') as log_exc:
                 with pytest.raises(aiohttp.web_exceptions.HTTPBadRequest) as ex:
-                    request = mock_request(data, loop)
+                    request = self.mock_request(data, loop)
                     config_data = copy.deepcopy(config)
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
@@ -345,7 +317,7 @@ class TestHttpSouthIngest(object):
         with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
             with patch.object(http_south._LOGGER, 'exception') as log_exc:
                 with pytest.raises(aiohttp.web_exceptions.HTTPBadRequest) as ex:
-                    request = mock_request(data, loop)
+                    request = self.mock_request(data, loop)
                     config_data = copy.deepcopy(config)
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
@@ -366,7 +338,7 @@ class TestHttpSouthIngest(object):
         with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
             with patch.object(http_south._LOGGER, 'exception') as log_exc:
                 with pytest.raises(aiohttp.web_exceptions.HTTPBadRequest) as ex:
-                    request = mock_request(data, loop)
+                    request = self.mock_request(data, loop)
                     config_data = copy.deepcopy(config)
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
