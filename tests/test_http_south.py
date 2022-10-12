@@ -152,38 +152,24 @@ def test_plugin_reconfigure():
     assert 1 == patch_shutdown.call_count
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
-def test_plugin_shutdown(mocker, unused_port):
+def test_plugin_shutdown():
     # GIVEN
-    port = {
-        'description': 'Port to listen on',
-        'type': 'integer',
-        'default': str(unused_port()),
-    }
     config_data = copy.deepcopy(config)
-    mocker.patch.dict(config_data, {'port': port})
     config_data['port']['value'] = config_data['port']['default']
     config_data['host']['value'] = config_data['host']['default']
     config_data['uri']['value'] = config_data['uri']['default']
     config_data['enableHttp']['value'] = config_data['enableHttp']['default']
-    log_exception = mocker.patch.object(http_south._LOGGER, "exception")
-    log_info = mocker.patch.object(http_south._LOGGER, "info")
-
-    # WHEN
-    http_south.plugin_start(config_data)
-    http_south.plugin_shutdown(config_data)
-
-    # THEN
-    assert 3 == log_info.call_count
-    calls = [call('Stopping South HTTP plugin.'),
-             call('South HTTP plugin shut down.')]
-    log_info.assert_has_calls(calls, any_order=True)
-    assert 0 == log_exception.call_count
+    config_data['enableCORS']['value'] = config_data['enableCORS']['default']
+    with patch.object(http_south._LOGGER, 'info') as patch_log_info:
+        # WHEN
+        http_south.plugin_start(config_data)
+        # THEN
+        http_south.plugin_shutdown(config_data)
+    assert 2 == patch_log_info.call_count
+    calls = [call('South HTTP plugin shut down.')]
+    patch_log_info.assert_has_calls(calls, any_order=True)
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("plugin", "south", "http")
 @pytest.mark.skip(reason="server object is None in tests. To be investigated.")
 def test_plugin_shutdown_error(mocker, unused_port, loop):
     # GIVEN
