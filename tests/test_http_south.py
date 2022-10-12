@@ -69,19 +69,6 @@ def test_plugin_contract():
     assert callable(getattr(http_south, 'plugin_reconfigure'))
 
 
-def mock_request(data, loop):
-    payload = StreamReader(loop=loop)
-    payload.feed_data(data.encode())
-    payload.feed_eof()
-
-    protocol = mock.Mock()
-    app = mock.Mock()
-    headers = CIMultiDict([('CONTENT-TYPE', 'application/json')])
-    req = make_mocked_request('POST', '/sensor-reading', headers=headers,
-                              protocol=protocol, payload=payload, app=app)
-    return req
-
-
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
@@ -201,12 +188,22 @@ def test_plugin_shutdown_error(mocker, unused_port, loop):
     assert 1 == log_exception.call_count
 
 
-@pytest.allure.feature("unit")
-@pytest.allure.story("services", "south", "ingest")
 class TestHttpSouthIngest(object):
-    """Unit tests fledge.plugins.south.http_south.http_south.HttpSouthIngest
+    """ Unit tests fledge.plugins.south.http_south.http_south.HttpSouthIngest
     """
-    @pytest.mark.asyncio
+    def mock_request(self, data, loop):
+        payload = StreamReader(loop=loop, limit=1, protocol=aiohttp.base_protocol.BaseProtocol(loop))
+        payload.feed_data(data.encode())
+        payload.feed_eof()
+
+        protocol = mock.Mock()
+        app = mock.Mock()
+        headers = CIMultiDict([('CONTENT-TYPE', 'application/json')])
+        req = make_mocked_request('POST', '/sensor-reading', headers=headers,
+                                  protocol=protocol, payload=payload, app=app)
+
+        return req
+
     async def test_render_post_reading_ok(self, loop):
         data = """[{
             "timestamp": "2017-01-02T01:02:03.23232Z-05:00",
@@ -220,8 +217,9 @@ class TestHttpSouthIngest(object):
                 }
             }
         }]"""
-        with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            request = mock_request(data, loop)
+
+        with patch.object(async_ingest, 'ingest_callback') as patch_ingest_callback:
+            request = self.mock_request(data, loop)
             config_data = copy.deepcopy(config)
             config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
             r = await HttpSouthIngest(config_data).render_post(request)
@@ -229,9 +227,8 @@ class TestHttpSouthIngest(object):
             # Assert the POST request response
             assert 200 == r.status
             assert 'success' == retval['result']
-            assert 1 == ingest_add_readings.call_count
+        assert 1 == patch_ingest_callback.call_count
 
-    @pytest.mark.asyncio
     async def test_render_post_sensor_values_ok(self, loop):
         data = """[{
             "timestamp": "2017-01-02T01:02:03.23232Z-05:00",
@@ -245,8 +242,8 @@ class TestHttpSouthIngest(object):
                 }
             }
         }]"""
-        with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            request = mock_request(data, loop)
+        with patch.object(async_ingest, 'ingest_callback') as patch_ingest_callback:
+            request = self.mock_request(data, loop)
             config_data = copy.deepcopy(config)
             config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
             r = await HttpSouthIngest(config_data).render_post(request)
@@ -254,25 +251,24 @@ class TestHttpSouthIngest(object):
             # Assert the POST request response
             assert 200 == r.status
             assert 'success' == retval['result']
-            assert 1 == ingest_add_readings.call_count
+        assert 1 == patch_ingest_callback.call_count
 
-    @pytest.mark.asyncio
     async def test_render_post_invalid_payload(self, loop):
         data = "blah"
         msg = 'Payload block must be a valid json'
-        with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            with patch.object(http_south._LOGGER, 'exception') as log_exc:
+        with patch.object(async_ingest, 'ingest_callback') as patch_ingest_callback:
+            with patch.object(http_south._LOGGER, 'exception') as patch_log_exc:
                 with pytest.raises(aiohttp.web_exceptions.HTTPBadRequest) as ex:
-                    request = mock_request(data, loop)
+                    request = self.mock_request(data, loop)
                     config_data = copy.deepcopy(config)
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
                     assert 400 == r.status
                 assert str(ex).endswith(msg)
-            assert 1 == log_exc.call_count
-            log_exc.assert_called_once_with('%d: %s', 400, msg)
+            assert 1 == patch_log_exc.call_count
+            patch_log_exc.assert_called_once_with('%d: %s', 400, msg)
+        assert 0 == patch_ingest_callback.call_count
 
-    @pytest.mark.asyncio
     async def test_render_post_reading_missing_delimiter(self, loop):
         data = """{
             "timestamp": "2017-01-02T01:02:03.23232Z-05:00",
@@ -286,19 +282,19 @@ class TestHttpSouthIngest(object):
                 }
         }"""
         msg = 'Payload block must be a valid json'
-        with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            with patch.object(http_south._LOGGER, 'exception') as log_exc:
+        with patch.object(async_ingest, 'ingest_callback') as patch_ingest_callback:
+            with patch.object(http_south._LOGGER, 'exception') as patch_log_exc:
                 with pytest.raises(aiohttp.web_exceptions.HTTPBadRequest) as ex:
-                    request = mock_request(data, loop)
+                    request = self.mock_request(data, loop)
                     config_data = copy.deepcopy(config)
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
                     assert 400 == r.status
                 assert str(ex).endswith(msg)
-            assert 1 == log_exc.call_count
-            log_exc.assert_called_once_with('%d: %s', 400, msg)
+            assert 1 == patch_log_exc.call_count
+            patch_log_exc.assert_called_once_with('%d: %s', 400, msg)
+        assert 0 == patch_ingest_callback.call_count
 
-    @pytest.mark.asyncio
     async def test_render_post_reading_not_dict(self, loop):
         data = """[{
             "timestamp": "2017-01-02T01:02:03.23232Z-05:00",
@@ -307,14 +303,15 @@ class TestHttpSouthIngest(object):
             "readings": "500"
         }]"""
         msg = 'readings must be a dictionary'
-        with patch.object(async_ingest, 'ingest_callback') as ingest_add_readings:
-            with patch.object(http_south._LOGGER, 'exception') as log_exc:
+        with patch.object(async_ingest, 'ingest_callback') as patch_ingest_callback:
+            with patch.object(http_south._LOGGER, 'exception') as patch_log_exc:
                 with pytest.raises(aiohttp.web_exceptions.HTTPBadRequest) as ex:
-                    request = mock_request(data, loop)
+                    request = self.mock_request(data, loop)
                     config_data = copy.deepcopy(config)
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
                     assert 400 == r.status
                 assert str(ex).endswith(msg)
-            assert 1 == log_exc.call_count
-            log_exc.assert_called_once_with('%d: %s', 400, msg)
+            assert 1 == patch_log_exc.call_count
+            patch_log_exc.assert_called_once_with('%d: %s', 400, msg)
+        assert 0 == patch_ingest_callback.call_count
