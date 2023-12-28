@@ -72,7 +72,7 @@ def test_plugin_contract():
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
-        'version': '2.2.0',
+        'version': '2.3.0',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
