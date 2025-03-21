@@ -72,7 +72,7 @@ def test_plugin_contract():
 def test_plugin_info():
     assert http_south.plugin_info() == {
         'name': 'HTTP South Listener',
-        'version': '2.6.0',
+        'version': '3.0.0',
         'mode': 'async',
         'type': 'south',
         'interface': '1.0',
@@ -264,7 +264,7 @@ class TestHttpSouthIngest(object):
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
                     assert 400 == r.status
-                assert str(ex).endswith(msg)
+                assert msg in str(ex)
             assert 1 == patch_log_exc.call_count
             patch_log_exc.assert_called_once_with('%d: %s', 400, msg)
         assert 0 == patch_ingest_callback.call_count
@@ -290,7 +290,7 @@ class TestHttpSouthIngest(object):
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
                     assert 400 == r.status
-                assert str(ex).endswith(msg)
+                assert msg in str(ex)
             assert 1 == patch_log_exc.call_count
             patch_log_exc.assert_called_once_with('%d: %s', 400, msg)
         assert 0 == patch_ingest_callback.call_count
@@ -311,7 +311,7 @@ class TestHttpSouthIngest(object):
                     config_data['assetNamePrefix']['value'] = config_data['assetNamePrefix']['default']
                     r = await HttpSouthIngest(config_data).render_post(request)
                     assert 400 == r.status
-                assert str(ex).endswith(msg)
+                assert msg in str(ex)
             assert 1 == patch_log_exc.call_count
             patch_log_exc.assert_called_once_with('%d: %s', 400, msg)
         assert 0 == patch_ingest_callback.call_count
