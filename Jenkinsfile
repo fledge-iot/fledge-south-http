@@ -18,7 +18,7 @@ timestamps {
                     // Change to corresponding BRANCH as required
                     // e.g. FOGL-xxxx, main etc.
                     sh '''
-                        BRANCH='develop'
+                        CORE_BRANCH='develop'
                         ${HOME}/buildFledge ${BRANCH} ${WORKSPACE}
                     '''
                 }
